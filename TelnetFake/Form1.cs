@@ -6,6 +6,7 @@ using System.Drawing;
 using System.Text;
 using System.Windows.Forms;
 using System.Net;
+using System.Net.Sockets;
 
 namespace TelnetFake
 {
@@ -15,10 +16,18 @@ namespace TelnetFake
         public Form1()
         {
             InitializeComponent();
+
+            listTestCodes.Items.AddRange(ControlCodes.MyControlCodes.ToArray());
+            listTestCodes.SelectedIndex = 0;
+
+            listBoxTestScreens.Items.AddRange(ControlCodes.MyTestScreens.ToArray());
+            listBoxTestScreens.SelectedIndex = 0;
         }
 
         void startServer()
         {
+            if (server != null)
+                return;
             server = new Server(IPAddress.Any, 1024);
             server.ClientConnected += clientConnected;
             server.ClientDisconnected += clientDisconnected;
@@ -88,12 +97,12 @@ namespace TelnetFake
         {
             //c.setStatus(EClientStatus.LoggedIn);
             log("messageReceived: " + message);
-            if (c.getCurrentStatus() != EClientStatus.LoggedIn)
-            {
-                string m = removeCRLF(message);
-                handleLogin(c, message);
-                return;
-            }
+            //if (c.getCurrentStatus() != EClientStatus.LoggedIn)
+            //{
+            //    string m = removeCRLF(message);
+            //    handleLogin(c, message);
+            //    return;
+            //}
 
             addLog("MESSAGE: " + message);
 
@@ -205,5 +214,94 @@ namespace TelnetFake
             stopServer();
         }
 
+        private void btnSendTest_Click(object sender, EventArgs e)
+        {
+            Dictionary<Socket, Client> clients;
+            try
+            {
+                clients = server.clients;
+            }
+            catch (Exception)
+            {
+                return;
+            }
+            if (clients.Count > 0)
+            {
+                Client client = getFirstClient();
+                server.clearClientScreen(client);
+
+                int cols = (int)numericWidth.Value; int rows = (int)numericHeight.Value;
+                String sRow = "";
+                for (int x = 0; x < cols; x++)
+                {
+                    sRow += (x % 10).ToString();
+                }
+                
+                byte[] disableWrap = Encoding.ASCII.GetBytes("\x1B[7l");
+                server.sendMessageToClient(client, disableWrap);
+
+                for (int x = 0; x < rows; x++)
+                {
+                    server.sendMessageToClient(client, ControlCodes.moveCursor(x, 0));
+                    server.sendMessageToClient(client, Encoding.ASCII.GetBytes(sRow));
+                }
+                server.sendMessageToClient(client, ControlCodes.moveCursor(0));
+            }
+        }
+
+        Client getFirstClient()
+        {
+            Dictionary<Socket, Client> clients = server.clients;
+            if (clients.Count > 0)
+            {
+                var c = clients.GetEnumerator();
+                c.MoveNext();
+                return c.Current.Value;
+            }
+            return null;
+        }
+        private void Form1_Load(object sender, EventArgs e)
+        {
+
+        }
+
+        private void btnSendCode_Click(object sender, EventArgs e)
+        {
+            var x = (ControlCodes.VTControlCodes) listTestCodes.SelectedItem;
+            Client c = getFirstClient();
+            server.sendMessageToClient(c, x.code);
+        }
+
+        private void button1_Click_1(object sender, EventArgs e)
+        {
+            var x = (ControlCodes.TestScreen)listBoxTestScreens.SelectedItem;
+            Client c = getFirstClient();
+            server.sendMessageToClient(c, x.code);
+        }
+
+        private void button1_Click_2(object sender, EventArgs e)
+        {
+            var x = (ControlCodes.TestScreen)listBoxTestScreens.SelectedItem;
+            Client c = getFirstClient();
+            string btnText = ((Button)sender).Text;
+            byte[] code = null;
+            if (btnText == "0")
+                code = ControlCodes.VTControlCodes.Home_Cursor.code;
+            else if (btnText == "^")
+                code = ControlCodes.VTControlCodes.Up_Cursor.code;
+            else if (btnText == "v")
+                code = ControlCodes.VTControlCodes.Down_Cursor.code;
+            else if (btnText == "<")
+                code = ControlCodes.VTControlCodes.Back_Cursor.code;
+            else if (btnText == ">")
+                code = ControlCodes.VTControlCodes.Fwd_Cursor.code;
+            else if (btnText == "M")
+                code = ControlCodes.VTControlCodes.Save_Cursor.code;
+            else if (btnText == "C")
+                code = ControlCodes.VTControlCodes.Restore_Cursor.code;
+
+            if(code!=null)
+                server.sendMessageToClient(c, code);
+        }
     }
 }

@@ -46,7 +46,7 @@ namespace TelnetFake
         /// Contains all connected clients indexed
         /// by their socket.
         /// </summary>
-        private Dictionary<Socket, Client> clients;
+        public Dictionary<Socket, Client> clients { get; private set; }
 
         public delegate void ConnectionEventHandler(Client c);
         /// <summary>
@@ -67,6 +67,9 @@ namespace TelnetFake
         /// Occurs when a message is received.
         /// </summary>
         public event MessageReceivedEventHandler MessageReceived;
+
+        #region control_codes
+        #endregion
 
         /// <summary>
         /// Initializes a new instance of the <see cref="Server"/> class.
@@ -140,7 +143,7 @@ namespace TelnetFake
         /// to clear the screen.</param>
         public void clearClientScreen(Client c)
         {
-            sendMessageToClient(c, "\u001B[1J\u001B[H");
+            sendMessageToClient(c, "\u001B[1J\u001B[H");    //erase up + cursor home
         }
 
         /// <summary>
@@ -180,7 +183,8 @@ namespace TelnetFake
         /// <param name="data">The bytes.</param>
         private void sendBytesToSocket(Socket s, byte[] data)
         {
-            s.BeginSend(data, 0, data.Length, SocketFlags.None, new AsyncCallback(sendData), s);
+            if(s!=null)
+                s.BeginSend(data, 0, data.Length, SocketFlags.None, new AsyncCallback(sendData), s);
         }
 
         /// <summary>
@@ -356,7 +360,9 @@ namespace TelnetFake
                         )
                     {
                         //sendMessageToSocket(clientSocket, "\u001B[1J\u001B[H");
-                        MessageReceived(client, client.getReceivedData());
+                        string sRecv = client.getReceivedData();
+                        MessageReceived(client, sRecv);
+                        System.Diagnostics.Debug.WriteLine("Received=" + sRecv);
                         client.resetReceivedData();
                     }
 
@@ -374,7 +380,6 @@ namespace TelnetFake
                             else
                                 clientSocket.BeginReceive(data, 0, dataSize, SocketFlags.None, new AsyncCallback(receiveData), clientSocket);
                         }
-
                         // 0x7F => delete character
                         else if (data[0] == 0x7F)
                             clientSocket.BeginReceive(data, 0, dataSize, SocketFlags.None, new AsyncCallback(receiveData), clientSocket);
@@ -387,11 +392,17 @@ namespace TelnetFake
                             // if client is not writing any password
                             if (client.getCurrentStatus() != EClientStatus.Authenticating)
                                 sendBytesToSocket(clientSocket, new byte[] { data[0] });
-
                             // Echo back asterisks if client is
                             // writing a password
                             else
                                 sendMessageToSocket(clientSocket, "*");
+
+                            //show data
+                            MessageReceived(client, client.getReceivedData());
+                            if (data[0] == 0x1b)
+                            {
+                                client.resetReceivedData();
+                            }
 
                             clientSocket.BeginReceive(data, 0, dataSize, SocketFlags.None, new AsyncCallback(receiveData), clientSocket);
                         }
